@@ -1,0 +1,6 @@
+## Pages
+- [Admin Dashboard - TanePro B2B](/admindashboard): TanePro B2B admin yönetim paneli
+- [Giriş Yap - TanePro B2B](/login): TanePro B2B platformuna giriş yapın
+- [Kayıt Ol - TanePro B2B](/register): TanePro B2B platformuna kayıt olun
+- [Müşteri Dashboard - TanePro B2B](/customerdashboard): TanePro B2B müşteri paneli
+- [Tedarikçi Dashboard - TanePro B2B](/supplierdashboard): TanePro B2B tedarikçi yönetim paneli
