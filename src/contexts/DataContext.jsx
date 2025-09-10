@@ -1,5 +1,6 @@
 
     import React, { createContext, useContext, useState, useEffect } from 'react';
+    import { supabase } from '@/lib/customSupabaseClient';
 
     const DataContext = createContext();
 
@@ -19,10 +20,37 @@
       const [orders, setOrders] = useState([]);
       const [cart, setCart] = useState([]);
 
+      const fetchCategoriesFromSupabase = async () => {
+        try {
+          const { data, error } = await supabase.from('categories').select('*').order('id', { ascending: true });
+          if (error) throw error;
+          if (Array.isArray(data) && data.length > 0) {
+            setCategories(data);
+            localStorage.setItem('tanepro_categories', JSON.stringify(data));
+            return true;
+          }
+          return false;
+        } catch (_) {
+          return false;
+        }
+      };
+
       const fetchProducts = async () => {
-        const localProducts = localStorage.getItem('tanepro_products');
-        if (localProducts) {
-          setProducts(JSON.parse(localProducts));
+        try {
+          const { data, error } = await supabase.from('products').select('*').order('created_at', { ascending: true });
+          if (error) throw error;
+          if (Array.isArray(data)) {
+            setProducts(data);
+            localStorage.setItem('tanepro_products', JSON.stringify(data));
+            return true;
+          }
+          return false;
+        } catch (_) {
+          const localProducts = localStorage.getItem('tanepro_products');
+          if (localProducts) {
+            setProducts(JSON.parse(localProducts));
+          }
+          return false;
         }
       };
 
@@ -46,12 +74,16 @@
 
       const initializeData = () => {
         const existingCategories = localStorage.getItem('tanepro_categories');
-        if (!existingCategories) {
-          localStorage.setItem('tanepro_categories', JSON.stringify(seedCategories));
-          setCategories(seedCategories);
-        } else {
+        if (existingCategories) {
           setCategories(JSON.parse(existingCategories));
         }
+        // Try Supabase, fallback to seeding if nothing exists locally or remotely
+        fetchCategoriesFromSupabase().then((ok) => {
+          if (!ok && !existingCategories) {
+            localStorage.setItem('tanepro_categories', JSON.stringify(seedCategories));
+            setCategories(seedCategories);
+          }
+        });
 
         const existingSuppliers = localStorage.getItem('tanepro_suppliers');
         const existingCustomers = localStorage.getItem('tanepro_customers');
@@ -318,6 +350,8 @@
         setProducts(prevProducts => [...prevProducts, newProduct]);
 
         try {
+            const { error } = await supabase.from('products').insert(newProduct);
+            if (error) throw error;
             const updatedProductsForStorage = [...currentProducts, newProduct];
             localStorage.setItem('tanepro_products', JSON.stringify(updatedProductsForStorage));
             await fetchProducts(); 
@@ -339,6 +373,8 @@
         setProducts(prevProducts => [...prevProducts, ...productsWithTimestamps]);
         
         try {
+            const { error } = await supabase.from('products').insert(productsWithTimestamps);
+            if (error) throw error;
             const updatedProductsForStorage = [...currentProducts, ...productsWithTimestamps];
             localStorage.setItem('tanepro_products', JSON.stringify(updatedProductsForStorage));
             await fetchProducts();
@@ -355,12 +391,16 @@
         );
         setProducts(updatedProducts);
         localStorage.setItem('tanepro_products', JSON.stringify(updatedProducts));
+        // Fire-and-forget update to Supabase (non-blocking)
+        supabase.from('products').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', productId);
       };
 
       const deleteProduct = (productId) => {
         const updatedProducts = products.filter(p => p.id !== productId);
         setProducts(updatedProducts);
         localStorage.setItem('tanepro_products', JSON.stringify(updatedProducts));
+        // Fire-and-forget delete to Supabase
+        supabase.from('products').delete().eq('id', productId);
       };
 
       const addCategory = (category) => {
@@ -372,6 +412,8 @@
         const updatedCategories = [...categories, newCategory];
         setCategories(updatedCategories);
         localStorage.setItem('tanepro_categories', JSON.stringify(updatedCategories));
+        // Try insert into Supabase (ignore errors, keep local)
+        supabase.from('categories').insert(newCategory);
         return newCategory;
       };
 
@@ -381,12 +423,14 @@
         );
         setCategories(updatedCategories);
         localStorage.setItem('tanepro_categories', JSON.stringify(updatedCategories));
+        supabase.from('categories').update({ ...updates, updatedAt: new Date().toISOString() }).eq('id', categoryId);
       };
 
       const deleteCategory = (categoryId) => {
         const updatedCategories = categories.filter(c => c.id !== categoryId);
         setCategories(updatedCategories);
         localStorage.setItem('tanepro_categories', JSON.stringify(updatedCategories));
+        supabase.from('categories').delete().eq('id', categoryId);
       };
       
       const uploadImage = async (file) => {
