@@ -340,48 +340,54 @@
       };
 
       const addProduct = async (productData) => {
-        const newProduct = {
-          ...productData,
-          id: Date.now().toString(),
-          created_at: new Date().toISOString()
-        };
-        
-        const currentProducts = products;
-        setProducts(prevProducts => [...prevProducts, newProduct]);
-
+        // Prefer Supabase insert with DB-generated UUID
         try {
-            const { error } = await supabase.from('products').insert(newProduct);
-            if (error) throw error;
-            const updatedProductsForStorage = [...currentProducts, newProduct];
-            localStorage.setItem('tanepro_products', JSON.stringify(updatedProductsForStorage));
-            await fetchProducts(); 
-            return newProduct;
-        } catch(error) {
-            setProducts(currentProducts);
-            throw error; 
+          const { data: inserted, error } = await supabase
+            .from('products')
+            .insert([{ ...productData, created_at: new Date().toISOString() }])
+            .select()
+            .single();
+          if (error) throw error;
+          const next = [...products, inserted];
+          setProducts(next);
+          localStorage.setItem('tanepro_products', JSON.stringify(next));
+          return inserted;
+        } catch (error) {
+          // Fallback to local-only
+          const localProduct = {
+            ...productData,
+            id: Date.now().toString(),
+            created_at: new Date().toISOString(),
+          };
+          const next = [...products, localProduct];
+          setProducts(next);
+          localStorage.setItem('tanepro_products', JSON.stringify(next));
+          return localProduct;
         }
       };
       
       const addMultipleProducts = async (newProducts) => {
-        const productsWithTimestamps = newProducts.map(p => ({
-            ...p,
-            id: Date.now().toString() + Math.random(), 
-            created_at: new Date().toISOString()
-        }));
-
-        const currentProducts = products;
-        setProducts(prevProducts => [...prevProducts, ...productsWithTimestamps]);
-        
         try {
-            const { error } = await supabase.from('products').insert(productsWithTimestamps);
-            if (error) throw error;
-            const updatedProductsForStorage = [...currentProducts, ...productsWithTimestamps];
-            localStorage.setItem('tanepro_products', JSON.stringify(updatedProductsForStorage));
-            await fetchProducts();
-            return productsWithTimestamps;
+          const payload = newProducts.map(p => ({ ...p, created_at: new Date().toISOString() }));
+          const { data: inserted, error } = await supabase
+            .from('products')
+            .insert(payload)
+            .select();
+          if (error) throw error;
+          const next = [...products, ...inserted];
+          setProducts(next);
+          localStorage.setItem('tanepro_products', JSON.stringify(next));
+          return inserted;
         } catch (error) {
-            setProducts(currentProducts); 
-            throw error;
+          const productsWithTimestamps = newProducts.map(p => ({
+            ...p,
+            id: Date.now().toString() + Math.random(),
+            created_at: new Date().toISOString(),
+          }));
+          const next = [...products, ...productsWithTimestamps];
+          setProducts(next);
+          localStorage.setItem('tanepro_products', JSON.stringify(next));
+          return productsWithTimestamps;
         }
     };
 
@@ -404,17 +410,26 @@
       };
 
       const addCategory = (category) => {
-        const newCategory = {
-          ...category,
-          id: Date.now(),
-          createdAt: new Date().toISOString()
-        };
-        const updatedCategories = [...categories, newCategory];
-        setCategories(updatedCategories);
-        localStorage.setItem('tanepro_categories', JSON.stringify(updatedCategories));
-        // Try insert into Supabase (ignore errors, keep local)
-        supabase.from('categories').insert(newCategory);
-        return newCategory;
+        // Try Supabase insert first
+        return supabase
+          .from('categories')
+          .insert([{ ...category, createdAt: new Date().toISOString() }])
+          .select()
+          .single()
+          .then(({ data, error }) => {
+            if (!error && data) {
+              const next = [...categories, data];
+              setCategories(next);
+              localStorage.setItem('tanepro_categories', JSON.stringify(next));
+              return data;
+            }
+            // Fallback to local
+            const local = { ...category, id: Date.now(), createdAt: new Date().toISOString() };
+            const next = [...categories, local];
+            setCategories(next);
+            localStorage.setItem('tanepro_categories', JSON.stringify(next));
+            return local;
+          });
       };
 
       const updateCategory = (categoryId, updates) => {
